@@ -1,0 +1,49 @@
+name: MILYWAY 점심 메뉴 수집
+
+on:
+  schedule:
+    # 시간은 UTC 기준. 11:17 UTC = 시카고 05:17(겨울)/06:17(여름), 15:17 UTC = 09:17/10:17
+    - cron: '17 11,15 * * 1-5'   # 평일 하루 2번
+    - cron: '17 18 * * 0'        # 일요일 1번 (다음 주 메뉴 미리 받기)
+  workflow_dispatch: {}          # Actions 탭에서 "Run workflow"로 수동 실행
+
+permissions:
+  contents: write
+
+concurrency:
+  group: milyway-menu
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 메뉴 PDF 받기
+        run: node scripts/fetch-menu.mjs
+
+      - name: 변경 시 커밋
+        id: commit
+        run: |
+          if git diff --quiet -- menu-data.json && git ls-files --error-unmatch menu-data.json >/dev/null 2>&1; then
+            echo "변경 없음"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git config user.name  "milyway-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add menu-data.json
+            git commit -m "menu: $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: jsDelivr 캐시 갱신
+        if: steps.commit.outputs.changed == 'true'
+        run: |
+          curl -fsS "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@main/menu-data.json" || echo "purge 요청 실패(무시) — 최대 12시간 후 자동 반영"
