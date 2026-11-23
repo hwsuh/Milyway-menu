@@ -46,7 +46,23 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # jsDelivr 캐시는 주소의 대소문자를 구분합니다. 저장소 이름은 대문자가 섞여 있고(Milyway-menu) Lunch Menu 툴은 소문자 주소로 받으므로
+      # 저장소 이름 그대로 + 소문자 주소를 둘 다 갱신합니다. (전에는 이름 그대로만 갱신해서 툴이 받는 주소는 최대 12시간 예전 메뉴였음)
+      # 수동 실행(Run workflow)이면 메뉴가 그대로여도 갱신합니다.
       - name: jsDelivr 캐시 갱신
-        if: steps.commit.outputs.changed == 'true'
+        if: steps.commit.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
-          curl -fsS "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@main/menu-data.json" || echo "purge 요청 실패(무시) — 최대 12시간 후 자동 반영"
+          for repo in "${GITHUB_REPOSITORY}" "${GITHUB_REPOSITORY,,}"; do
+            curl -fsS "https://purge.jsdelivr.net/gh/${repo}@main/menu-data.json" || echo "purge 요청 실패(무시) — 최대 12시간 후 자동 반영"
+            echo
+          done
+
+      - name: 툴이 받는 주소 확인
+        if: always()
+        run: |
+          sleep 5
+          want=$(head -c 200 menu-data.json | grep -o '"fetchedAt": *"[^"]*"' || true)
+          got=$(curl -fsS --max-time 60 "https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY,,}@main/menu-data.json" | head -c 200 | grep -o '"fetchedAt": *"[^"]*"' || true)
+          echo "저장소:   ${want}"
+          echo "jsDelivr: ${got}"
+          if [ -n "$want" ] && [ "$want" = "$got" ]; then echo "같음 — 툴이 새 메뉴를 받습니다"; else echo "다름 — jsDelivr 가 아직 예전 파일을 주고 있습니다 (최대 12시간)"; fi
