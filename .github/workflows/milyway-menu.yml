@@ -62,7 +62,7 @@ jobs:
         run: |
           sleep 5
           want=$(head -c 200 menu-data.json | grep -o '"fetchedAt": *"[^"]*"' || true)
-          got=$(curl -fsS --max-time 60 "https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY,,}@main/menu-data.json" | head -c 200 | grep -o '"fetchedAt": *"[^"]*"' || true)
+          got=$(curl -fsS --max-time 60 "https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY,,}@main/menu-data.json" 2>/dev/null | head -c 200 | grep -o '"fetchedAt": *"[^"]*"' || true)
           echo "저장소:   ${want}"
           echo "jsDelivr: ${got}"
           if [ -n "$want" ] && [ "$want" = "$got" ]; then echo "같음 — 툴이 새 메뉴를 받습니다"; else echo "다름 — jsDelivr 가 아직 예전 파일을 주고 있습니다 (최대 12시간)"; fi
